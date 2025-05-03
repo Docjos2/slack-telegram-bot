@@ -6,10 +6,6 @@
     "start": "node slack_new_campaign_form.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
     "@slack/bolt": "^4.2.1",
     "@supabase/supabase-js": "^2.49.4",
