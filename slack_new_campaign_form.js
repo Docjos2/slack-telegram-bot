@@ -1,37 +1,191 @@
 // FILE: slack_new_campaign_form.js
-// (Assuming necessary imports for app, supabase, logger are present)
+require('dotenv').config();
+const { App, LogLevel } = require('@slack/bolt'); // Import LogLevel
+const { createClient } = require('@supabase/supabase-js');
 
-// ... (Keep Step 1 and Step 2 handlers as they are, maybe add JSON.parse try/catch) ...
+// Initialize Supabase
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
-// Step 1 submission: push Step 2 (carry Step 1 values forward)
-app.view('new_campaign_step1', async ({ ack, view, client, logger }) => {
+// Initialize Bolt in Socket Mode
+const app = new App({
+  token: process.env.SLACK_BOT_TOKEN,       // xoxb-...
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
+  socketMode: true,                         // Enable Socket Mode
+  appToken: process.env.SLACK_APP_TOKEN,    // xapp-...
+  logLevel: LogLevel.INFO // Optional: Set log level (DEBUG, INFO, WARN, ERROR)
+});
+
+// Use app.logger for logging
+const logger = app.logger;
+
+// --- Step 0: Slash Command to Open the First Modal ---
+app.command('/new_campaign', async ({ ack, body, client, logger }) => {
+  // Acknowledge the command request
   await ack();
 
-  // 1) capture Step 1 values
+  try {
+    // Define the view for the first step
+    const viewPayload = {
+      type: 'modal',
+      // Unique identifier for this view sequence
+      callback_id: 'new_campaign_step1',
+      title: { type: 'plain_text', text: 'New Campaign - 1/3' },
+      submit: { type: 'plain_text', text: 'Next' },
+      close: { type: 'plain_text', text: 'Cancel' },
+      blocks: [
+        // --- Blocks for Step 1 ---
+        {
+          "type": "input",
+          "block_id": "campaign_name_block",
+          "element": {
+            "type": "plain_text_input",
+            "action_id": "campaign_name_input"
+          },
+          "label": {
+            "type": "plain_text",
+            "text": "Campaign Name"
+          }
+        },
+        {
+          "type": "input",
+          "block_id": "brand_product_block",
+          "element": {
+            "type": "plain_text_input",
+            "action_id": "brand_product_input"
+          },
+          "label": {
+            "type": "plain_text",
+            "text": "Brand / Product"
+          }
+        },
+        {
+          "type": "input",
+          "block_id": "background_block",
+          "element": {
+            "type": "plain_text_input",
+            "action_id": "background_input",
+            "multiline": true
+          },
+          "label": {
+            "type": "plain_text",
+            "text": "Background / Why Now?"
+          }
+        },
+        {
+            "type": "input",
+            "block_id": "objectives_block",
+            "element": {
+                "type": "checkboxes",
+                "action_id": "objectives_select",
+                "options": [
+                    { "text": { "type": "plain_text", "text": "Awareness" }, "value": "awareness" },
+                    { "text": { "type": "plain_text", "text": "Consideration" }, "value": "consideration" },
+                    { "text": { "type": "plain_text", "text": "Conversion" }, "value": "conversion" },
+                    { "text": { "type": "plain_text", "text": "Loyalty" }, "value": "loyalty" }
+                ]
+            },
+            "label": { "type": "plain_text", "text": "Objectives" }
+        },
+        {
+            "type": "input",
+            "block_id": "audience_block",
+            "element": { "type": "plain_text_input", "action_id": "audience_input", "multiline": true },
+            "label": { "type": "plain_text", "text": "Target Audience" }
+        },
+        {
+            "type": "input",
+            "block_id": "budget_block",
+            "element": { "type": "plain_text_input", "action_id": "budget_input", "dispatch_action": false }, // Use plain text for flexibility, parse later
+            "label": { "type": "plain_text", "text": "Budget (Estimate)" }
+        },
+         {
+            "type": "input",
+            "block_id": "channels_block",
+            "element": {
+                "type": "checkboxes",
+                "action_id": "channels_select",
+                "options": [
+                    { "text": { "type": "plain_text", "text": "Social Media" }, "value": "social" },
+                    { "text": { "type": "plain_text", "text": "Search (SEM/SEO)" }, "value": "search" },
+                    { "text": { "type": "plain_text", "text": "Display Ads" }, "value": "display" },
+                    { "text": { "type": "plain_text", "text": "Email Marketing" }, "value": "email" },
+                    { "text": { "type": "plain_text", "text": "Content Marketing" }, "value": "content" },
+                    { "text": { "type": "plain_text", "text": "Offline (Events, Print)" }, "value": "offline" }
+                ]
+            },
+            "label": { "type": "plain_text", "text": "Channels" }
+        },
+        {
+            "type": "input",
+            "block_id": "assets_block",
+            "optional": true, // Make optional
+            "element": { "type": "plain_text_input", "action_id": "assets_input", "multiline": true },
+            "label": { "type": "plain_text", "text": "Links to Existing Assets (Optional)" }
+        }
+        // --- End Blocks for Step 1 ---
+      ]
+    };
+
+    // Log before opening the view
+    logger.info(`>>> Opening Step 1 modal with callback_id: ${viewPayload.callback_id}`);
+    // logger.debug(`>>> View Payload Step 1: ${JSON.stringify(viewPayload)}`); // Uncomment for detailed debugging
+
+    // Call views.open with the trigger_id and view payload
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: viewPayload
+    });
+    logger.info(`>>> Successfully called views.open for trigger_id: ${body.trigger_id}`);
+
+  } catch (error) {
+    logger.error(`Error in /new_campaign command handler: ${error}`);
+    // Optionally send an ephemeral message to the user
+    try {
+        await client.chat.postEphemeral({
+            channel: body.channel_id,
+            user: body.user_id,
+            text: `Sorry, I couldn't open the campaign form. Error: ${error.message}`
+        });
+    } catch (ephemeralError) {
+        logger.error(`Failed to send ephemeral error message: ${ephemeralError}`);
+    }
+  }
+});
+
+
+// --- Step 1 Submission: Push Step 2 ---
+app.view('new_campaign_step1', async ({ ack, view, client, logger }) => {
+  // Acknowledge the view submission
+  await ack();
+
+  // Capture Step 1 values
   const step1 = view.state.values;
 
-  // 2) push Step 2, embedding step1 in private_metadata
+  // Push Step 2, embedding step1 in private_metadata
   try {
+    logger.info(`>>> Submitting Step 1, pushing Step 2. Trigger ID: ${view.trigger_id}`);
     await client.views.push({
-      trigger_id: view.trigger_id, // Use trigger_id from the view submission
+      // trigger_id is required for pushing views
+      trigger_id: view.trigger_id,
       view: {
         type: 'modal',
         callback_id: 'new_campaign_step2',
         title: { type: 'plain_text', text: 'New Campaign - 2/3' },
         submit: { type: 'plain_text', text: 'Next' },
         close: { type: 'plain_text', text: 'Cancel' },
-        // Store previous step's data
+        // Pass step 1 data to the next view
         private_metadata: JSON.stringify({ step1 }),
-        // Define blocks for Step 2 here...
         blocks: [
-          // Example: Add blocks for KPIs, Message Pillars etc.
-          // Make sure the block_id and action_id match what you use in Step 3 processing
+          // --- Blocks for Step 2 ---
           {
             "type": "input",
-            "block_id": "kpis_block", // Ensure this block_id is used below
+            "block_id": "kpis_block",
             "element": {
               "type": "plain_text_input",
-              "action_id": "kpis_input", // Ensure this action_id is used below
+              "action_id": "kpis_input",
               "multiline": true,
               "placeholder": {
                 "type": "plain_text",
@@ -43,37 +197,61 @@ app.view('new_campaign_step1', async ({ ack, view, client, logger }) => {
               "text": "KPIs & Targets"
             }
           },
-          // ... other blocks for step 2 ...
+          {
+            "type": "input",
+            "block_id": "pillars_block",
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "pillars_input",
+                "placeholder": { "type": "plain_text", "text": "Pillar 1, Pillar 2, Pillar 3" }
+            },
+            "label": { "type": "plain_text", "text": "Key Message Pillars (comma-separated)" }
+          },
+          {
+            "type": "input",
+            "block_id": "milestones_block",
+            "optional": true,
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "milestones_input",
+                "multiline": true,
+                "placeholder": { "type": "plain_text", "text": "YYYY-MM-DD: Check-in note\nYYYY-MM-DD: Launch phase 1" }
+            },
+            "label": { "type": "plain_text", "text": "Milestones / Check-ins (Optional, one per line: DATE: Note)" }
+          },
+          // --- End Blocks for Step 2 ---
         ]
       }
     });
+     logger.info(`>>> Successfully pushed Step 2 view.`);
   } catch (err) {
     logger.error(`Error pushing step 2 view: ${err}`);
   }
 });
 
-// Step 2 submission: push Step 3 (carry Step 1 & Step 2 values forward)
+// --- Step 2 Submission: Push Step 3 ---
 app.view('new_campaign_step2', async ({ ack, view, client, logger }) => {
+  // Acknowledge the view submission
   await ack();
 
   let step1 = {};
   const step2 = view.state.values; // Capture Step 2 values
 
-  // 1) Safely retrieve previous step's data
+  // Safely retrieve previous step's data
   try {
     const metadata = JSON.parse(view.private_metadata);
     step1 = metadata.step1 || {}; // Use default if parsing fails or step1 missing
   } catch (parseError) {
     logger.error(`Error parsing private_metadata in step 2: ${parseError}`);
-    // Decide how to handle - maybe show an error message?
-    // For now, we proceed with potentially missing step1 data
+    // Decide how to handle - maybe show an error message back to the user?
+    // For now, we proceed with potentially missing step1 data but log the error.
   }
 
-
-  // 2) push Step 3, embedding both step1 & step2
+  // Push Step 3, embedding both step1 & step2
   try {
+    logger.info(`>>> Submitting Step 2, pushing Step 3. Trigger ID: ${view.trigger_id}`);
     await client.views.push({
-      trigger_id: view.trigger_id, // Use trigger_id from the view submission
+      trigger_id: view.trigger_id,
       view: {
         type: 'modal',
         callback_id: 'new_campaign_step3',
@@ -82,9 +260,51 @@ app.view('new_campaign_step2', async ({ ack, view, client, logger }) => {
         close: { type: 'plain_text', text: 'Cancel' },
         // Store combined previous steps' data
         private_metadata: JSON.stringify({ step1, step2 }),
-        // Define blocks for Step 3 here...
         blocks: [
-           // ... blocks for step 3 (e.g., reporting, legal) ...
+           // --- Blocks for Step 3 ---
+           {
+             "type": "input",
+             "block_id": "tactics_block",
+             "optional": true,
+             "element": {
+               "type": "plain_text_input",
+               "action_id": "tactics_input",
+               "multiline": true
+             },
+             "label": {
+               "type": "plain_text",
+               "text": "Tactical Requirements (Optional)"
+             }
+           },
+           {
+             "type": "input",
+             "block_id": "legal_block",
+             "optional": true,
+             "element": {
+               "type": "plain_text_input",
+               "action_id": "legal_input",
+               "multiline": true
+             },
+             "label": {
+               "type": "plain_text",
+               "text": "Legal / Compliance Notes (Optional)"
+             }
+           },
+           {
+                "type": "input",
+                "block_id": "stakeholders_block",
+                "element": {
+                    "type": "checkboxes", // Or multi_users_select if you want specific users
+                    "action_id": "stakeholders_select",
+                    "options": [ // Example roles - adjust as needed
+                        { "text": { "type": "plain_text", "text": "Marketing Lead" }, "value": "marketing_lead" },
+                        { "text": { "type": "plain_text", "text": "Sales Lead" }, "value": "sales_lead" },
+                        { "text": { "type": "plain_text", "text": "Legal Team" }, "value": "legal_team" },
+                        { "text": { "type": "plain_text", "text": "Product Manager" }, "value": "product_manager" }
+                    ]
+                },
+                "label": { "type": "plain_text", "text": "Stakeholder Approvals Required" }
+            },
            {
              "type": "input",
              "block_id": "reporting_reqs_block",
@@ -98,57 +318,92 @@ app.view('new_campaign_step2', async ({ ack, view, client, logger }) => {
                "text": "Reporting Requirements"
              }
            },
-           // ... other blocks ...
+           {
+                "type": "input",
+                "block_id": "distribution_block",
+                "optional": true,
+                "element": {
+                    "type": "checkboxes", // Or multi_channels_select
+                    "action_id": "distribution_select",
+                    "options": [ // Example distribution methods
+                        { "text": { "type": "plain_text", "text": "Email List: Marketing Team" }, "value": "email_marketing" },
+                        { "text": { "type": "plain_text", "text": "Slack Channel: #campaign-updates" }, "value": "slack_campaign_updates" },
+                        { "text": { "type": "plain_text", "text": "Shared Drive Folder" }, "value": "shared_drive" }
+                    ]
+                },
+                "label": { "type": "plain_text", "text": "Distribution of Reporting (Optional)" }
+            }
+           // --- End Blocks for Step 3 ---
         ]
       }
     });
+    logger.info(`>>> Successfully pushed Step 3 view.`);
   } catch (err) {
     logger.error(`Error pushing step 3 view: ${err}`);
   }
 });
 
 
-// Final submission: read private_metadata, combine all steps, format for Supabase
+// --- Final Submission: Process All Data ---
 app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
   // Acknowledge the view submission immediately
   await ack();
+  logger.info(`>>> Received final submission (Step 3) from user ${body.user.id}`);
 
   let step1 = {};
   let step2 = {};
   const step3 = view.state.values; // Capture Step 3 values
 
-  // 1) Safely parse all previous steps' data from private_metadata
+  // Safely parse all previous steps' data from private_metadata
   try {
     const metadata = JSON.parse(view.private_metadata);
     step1 = metadata.step1 || {};
     step2 = metadata.step2 || {};
+    logger.info(`>>> Successfully parsed private_metadata for steps 1 & 2.`);
   } catch (parseError) {
     logger.error(`Error parsing private_metadata in step 3: ${parseError}`);
-    // Optionally notify the user about the error
-    await client.chat.postEphemeral({
-      channel: body.user.id,
-      user: body.user.id,
-      text: `⚠️ Error processing previous steps' data. Please try again.`
-    });
+    // Notify the user about the error
+    try {
+        await client.chat.postEphemeral({
+          channel: body.user.id, // Use user ID for ephemeral message channel
+          user: body.user.id,
+          text: `⚠️ Error processing data from previous steps. Please cancel and try creating the campaign again.`
+        });
+    } catch (ephemeralError) {
+        logger.error(`Failed to send ephemeral error message: ${ephemeralError}`);
+    }
     return; // Stop processing if metadata is corrupt
   }
 
-  // 2) Combine values from all steps into a single 'values' object for easier access
-  // Note: Assumes unique block_ids across all steps. If not, structure access like step1['block_id'].action_id.value
+  // Combine values from all steps into a single state object
   const combinedState = { ...step1, ...step2, ...step3 };
+  // logger.debug(">>> Combined State:", JSON.stringify(combinedState, null, 2)); // Uncomment for debugging
 
   // Helper function to safely get value from state object
-  // state = combined state object
-  // blockId = the unique block_id of the input
-  // actionId = the action_id of the input element
-  // type = expected type ('value', 'selected_options', 'selected_option', 'selected_date', etc.)
-  const getValue = (state, blockId, actionId, type = 'value') => {
-      return state[blockId]?.[actionId]?.[type] || null;
+  const getValue = (state, blockId, actionId, type = 'value', defaultValue = null) => {
+      const block = state[blockId];
+      if (!block) return defaultValue;
+      const element = block[actionId];
+      if (!element) return defaultValue;
+
+      switch (type) {
+          case 'selected_options':
+              return element.selected_options || defaultValue || []; // Default to empty array for multi-selects
+          case 'selected_option':
+              return element.selected_option || defaultValue;
+          case 'selected_date':
+              return element.selected_date || defaultValue;
+          case 'value':
+          default:
+              // Handle plain_text_input, checkboxes etc. returning 'value'
+              return element.value !== undefined ? element.value : defaultValue;
+      }
   };
+
 
   // Helper function to parse KPI input string into JSONB format
   const parseKpis = (kpiString) => {
-    if (!kpiString) return [];
+    if (!kpiString || typeof kpiString !== 'string') return [];
     return kpiString.split('\n')
       .map(line => line.trim())
       .filter(line => line.includes(':')) // Ensure line has a separator
@@ -162,108 +417,117 @@ app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
   };
 
   // Helper function to parse Milestones input string into JSONB format
-    const parseMilestones = (milestoneString) => {
-      if (!milestoneString) return [];
+  const parseMilestones = (milestoneString) => {
+      if (!milestoneString || typeof milestoneString !== 'string') return [];
       return milestoneString.split('\n')
         .map(line => line.trim())
         .filter(line => line.includes(':')) // Ensure line has a separator
         .map(line => {
           const parts = line.split(':');
-          const date = parts[0].trim();
+          const date = parts[0].trim(); // Keep date as string for now
           const note = parts.slice(1).join(':').trim(); // Handle potential colons in note
+          // Basic validation could be added here for date format if needed
           return { date, note };
         })
         .filter(ms => ms.date && ms.note); // Ensure both parts exist
-    };
-
-
-  // 3) Build the payload for Supabase, matching the SQL schema
-  // Use the getValue helper for safety. Replace block_ids/action_ids with your actual ones.
-  // Ensure these block_ids/action_ids exist in the respective steps' modal definitions.
-  const payload = {
-    // Assuming these fields come from Step 1
-    user_id: body.user.id, // Get user ID from the body
-    campaign_name: getValue(combinedState, 'campaign_name_block', 'campaign_name_input'),
-    brand_product: getValue(combinedState, 'brand_product_block', 'brand_product_input'), // New field
-    background: getValue(combinedState, 'background_block', 'background_input'), // New field
-    objectives: (getValue(combinedState, 'objectives_block', 'objectives_select', 'selected_options') || []).map(o => o.value), // Assuming multi-select
-    target_audience: getValue(combinedState, 'audience_block', 'audience_input'),
-    budget: parseInt(getValue(combinedState, 'budget_block', 'budget_input') || '0', 10),
-    channels: (getValue(combinedState, 'channels_block', 'channels_select', 'selected_options') || []).map(o => o.value), // Assuming multi-select
-    assets_links: getValue(combinedState, 'assets_block', 'assets_input'),
-
-    // Assuming these fields come from Step 2
-    // --- CRITICAL FIX FOR KPIs ---
-    kpis: parseKpis(getValue(combinedState, 'kpis_block', 'kpis_input')), // Use parser function for JSONB
-    message_pillars: (getValue(combinedState, 'pillars_block', 'pillars_input') || '').split(',').map(s => s.trim()).filter(s => s), // TEXT[]
-    milestones: parseMilestones(getValue(combinedState, 'milestones_block', 'milestones_input')), // Use parser function for JSONB
-
-    // Assuming these fields come from Step 3
-    tactical_requirements: getValue(combinedState, 'tactics_block', 'tactics_input'), // TEXT
-    legal_notes: getValue(combinedState, 'legal_block', 'legal_input'), // TEXT
-    stakeholder_approvals: (getValue(combinedState, 'stakeholders_block', 'stakeholders_select', 'selected_options') || []).map(o => o.value), // TEXT[]
-    reporting_requirements: getValue(combinedState, 'reporting_reqs_block', 'reporting_reqs_input'), // TEXT
-    report_distribution: (getValue(combinedState, 'distribution_block', 'distribution_select', 'selected_options') || []).map(o => o.value), // TEXT[]
   };
 
-   // Remove null values if your DB doesn't handle them or if you prefer cleaner inserts
+  // Build the payload for Supabase, matching the SQL schema
+  // Use the getValue helper for safety and provide default values where appropriate
+  const payload = {
+    // Meta
+    user_id: body.user.id, // Get user ID from the body
+
+    // Step 1 Fields
+    campaign_name: getValue(combinedState, 'campaign_name_block', 'campaign_name_input', 'value', 'Untitled Campaign'),
+    brand_product: getValue(combinedState, 'brand_product_block', 'brand_product_input', 'value', ''), // NOT NULL DEFAULT ''
+    background: getValue(combinedState, 'background_block', 'background_input', 'value', ''), // NOT NULL DEFAULT ''
+    objectives: (getValue(combinedState, 'objectives_block', 'objectives_select', 'selected_options') || []).map(o => o.value), // Assuming this maps to TEXT[] or similar
+    target_audience: getValue(combinedState, 'audience_block', 'audience_input', 'value'), // TEXT, allows NULL
+    budget: parseInt(getValue(combinedState, 'budget_block', 'budget_input', 'value', '0') || '0', 10), // Assuming integer budget
+    channels: (getValue(combinedState, 'channels_block', 'channels_select', 'selected_options') || []).map(o => o.value), // Assuming TEXT[]
+    assets_links: getValue(combinedState, 'assets_block', 'assets_input', 'value'), // TEXT, allows NULL
+
+    // Step 2 Fields
+    kpis: parseKpis(getValue(combinedState, 'kpis_block', 'kpis_input', 'value')), // JSONB NOT NULL DEFAULT '[]'
+    message_pillars: (getValue(combinedState, 'pillars_block', 'pillars_input', 'value', '') || '').split(',').map(s => s.trim()).filter(s => s), // TEXT[] NOT NULL DEFAULT '{}'
+    milestones: parseMilestones(getValue(combinedState, 'milestones_block', 'milestones_input', 'value')), // JSONB DEFAULT '[]'
+
+    // Step 3 Fields
+    tactical_requirements: getValue(combinedState, 'tactics_block', 'tactics_input', 'value'), // TEXT, allows NULL
+    legal_notes: getValue(combinedState, 'legal_block', 'legal_input', 'value'), // TEXT, allows NULL
+    stakeholder_approvals: (getValue(combinedState, 'stakeholders_block', 'stakeholders_select', 'selected_options') || []).map(o => o.value), // TEXT[] NOT NULL DEFAULT '{}'
+    reporting_requirements: getValue(combinedState, 'reporting_reqs_block', 'reporting_reqs_input', 'value'), // TEXT, allows NULL
+    report_distribution: (getValue(combinedState, 'distribution_block', 'distribution_select', 'selected_options') || []).map(o => o.value), // TEXT[] DEFAULT '{}'
+  };
+
+   // Clean up payload: Remove null values for fields that allow NULL in DB
+   // Keep empty arrays/objects for fields with NOT NULL DEFAULTs
    Object.keys(payload).forEach(key => {
      if (payload[key] === null) {
-       delete payload[key];
-     }
-     // Clean up empty arrays for array types if needed (depends on DB column constraints)
-     if (Array.isArray(payload[key]) && payload[key].length === 0) {
-        // Decide whether to delete the key or send an empty array '{}' based on DB DEFAULTs and NOT NULL constraints
-        // If the column is NOT NULL DEFAULT '{}', sending `[]` via the JS client usually works.
-        // If it allows NULL, deleting the key might be preferable. Let's assume sending [] is okay.
+       // Check your DB schema if the column allows NULLs. If yes, delete the key.
+       // If NO, you might want to set a default like '' or 0 depending on type,
+       // but the getValue helper should handle defaults now.
+       // Example: Assuming fields like tactical_requirements, legal_notes, etc., allow NULL
+       if (['tactical_requirements', 'legal_notes', 'reporting_requirements', 'assets_links', 'target_audience'].includes(key)) {
+            delete payload[key];
+       }
+       // Ensure required fields have a value (though defaults should cover this)
+       if (key === 'campaign_name' && !payload[key]) payload[key] = 'Untitled Campaign';
      }
    });
 
-  // 4) Insert into Supabase
-  logger.info('Attempting to insert payload:', JSON.stringify(payload, null, 2)); // Log the final payload
-  const { error } = await supabase.from('campaigns').insert(payload);
+  // Log the final payload before insertion
+  logger.info('Attempting to insert payload into Supabase:', JSON.stringify(payload, null, 2));
 
-  // 5) Confirm or error message to the user
+  // Insert into Supabase
+  const { data, error } = await supabase.from('campaigns').insert(payload).select(); // Added .select() to potentially get back the inserted row
+
+  // Confirm or error message to the user
   if (error) {
     logger.error('Supabase error:', error);
-    // Provide more specific feedback if possible
-    await client.chat.postEphemeral({
-      channel: body.user.id,
-      user: body.user.id,
-      text: `❌ Failed to save campaign: ${error.message}. Please check your inputs and try again. \n Details: ${error.details || ''}`
-    });
+    // Provide more specific feedback
+    try {
+        await client.chat.postEphemeral({
+          channel: body.user.id,
+          user: body.user.id,
+          text: `❌ Failed to save campaign: ${error.message}. Please check your inputs, especially formatting for KPIs/Milestones, and try again. \n Details: ${error.details || '(no details provided)'}`
+        });
+    } catch (ephemeralError) {
+        logger.error(`Failed to send ephemeral error message: ${ephemeralError}`);
+    }
   } else {
-    logger.info(`Campaign '${payload.campaign_name}' saved successfully for user ${body.user.id}.`);
-    await client.chat.postMessage({
-      channel: body.user.id, // Send confirmation to the user who submitted
-      text: `✅ Your campaign *${payload.campaign_name}* has been saved!`
-    });
+    logger.info(`Campaign '${payload.campaign_name}' saved successfully for user ${body.user.id}. Inserted data: ${JSON.stringify(data)}`);
+    try {
+        await client.chat.postMessage({
+          channel: body.user.id, // Send confirmation to the user who submitted
+          text: `✅ Your campaign *${payload.campaign_name}* has been saved!`
+          // Optionally add blocks with a summary or link to the campaign if available
+        });
+    } catch (messageError) {
+        logger.error(`Failed to send success message: ${messageError}`);
+    }
   }
 });
 
-// ... (rest of your Bolt app setup, including app.start()) ...
+// --- Global Error Handler ---
+app.error(async (error) => {
+  logger.error(`Unhandled error: ${error}`);
+  // Add any necessary global error handling logic here
+});
 
-```
-**Explanation of Changes:**
 
-1.  **Robust `private_metadata` Parsing:** Added `try...catch` blocks when parsing `private_metadata` in steps 2 and 3 to prevent errors if the data is missing or corrupt.
-2.  **Combined State Object:** Created a `combinedState` object in step 3 to merge values from all steps, simplifying access using `block_id` and `action_id`. **Important:** This assumes your `block_id`s are unique across *all* steps of the modal. If you reuse `block_id`s, you'll need to access the state differently (e.g., `step1['block_id']['action_id'].value`).
-3.  **`getValue` Helper:** Introduced a helper function `getValue` to safely access nested properties within the state object, returning `null` if any part of the path is missing. This makes the payload construction cleaner and less prone to errors.
-4.  **`parseKpis` Function:** Added a specific function to parse the multi-line KPI input string into the required JSONB array-of-objects format `[{ metric: '...', target: '...' }]`. You **must** update the corresponding input block in your Step 2 modal definition to guide the user on the expected format (e.g., "Metric Name: Target Value" per line).
-5.  **`parseMilestones` Function:** Added a similar parser for milestones to ensure consistent JSONB formatting.
-6.  **Payload Construction:** Updated the `payload` object creation to use the `getValue` helper and the `parseKpis`/`parseMilestones` functions, ensuring data types align with the Supabase schema (`JSONB` for `kpis` and `milestones`, `TEXT[]` for arrays, `TEXT` for strings, `integer` for `budget`).
-7.  **Null/Empty Value Handling:** Added basic logic to remove `null` keys before insertion (optional, depending on preference) and noted considerations for empty arrays based on DB constraints.
-8.  **Logging:** Added logging for the final payload before insertion and for successful saves, which is helpful for debugging.
-9.  **Error Message:** Improved the error message sent to the user in case of Supabase failure.
-10. **Trigger ID:** Ensured `trigger_id: view.trigger_id` is used in `views.push` calls, which is crucial for pushing subsequent views correctly.
+// --- Start the app ---
+(async () => {
+  try {
+    await app.start();
+    console.log('⚡️ Bolt app is running in Socket Mode!');
+     logger.info('⚡️ Bolt app is running in Socket Mode!');
+  } catch (startError) {
+     console.error('💥 Failed to start Bolt app:', startError);
+     logger.error('💥 Failed to start Bolt app:', startError);
+     process.exit(1);
+  }
+})();
 
-**Don't Forget the Checklist!**
 
-Even with corrected code, the original troubleshooting steps are vital:
-
-1.  ✅ **Confirm Code is Running:** Use `ps aux | grep your_file.js`, check Railway/host logs, ensure the `⚡️ Bolt app is running...` message appears without errors. Kill old processes.
-2.  ✅ **Re-install Slack App:** *Crucial* after changing modal `blocks` or `callback_id`s to clear Slack's cache. Go to `https://api.slack.com/apps/{YOUR_APP_ID}/install-on-team` and reinstall.
-3.  ✅ **Double-check `callback_id`s:** Ensure the ID in `app.command`'s `views.open` matches `app.view('new_campaign_step1',...)`, and subsequent `views.push` IDs match their `app.view` listeners (`step1`, `step2`, `step3`).
-4.  ✅ **Test End-to-End:** Use a clean/new Slack workspace for testing the full `/new_campaign` flow.
-
-By applying the code fixes (especially for `kpis` and robust state handling) and diligently following the deployment/caching checklist, you should be able to get your multi-step modal working reliably. Remember to adjust the `block_id` and `action_id` names in the code to match your actual modal definitio
