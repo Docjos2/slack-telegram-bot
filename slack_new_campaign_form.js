@@ -30,8 +30,8 @@ app.command('/new_campaign', async ({ ack, body, client, logger }) => {
     // Define the view for the first step
     const viewPayload = {
       type: 'modal',
-      // Unique identifier for this view sequence
-      callback_id: 'new_campaign_step1',
+      // *** RENAMED CALLBACK ID ***
+      callback_id: 'new_campaign_v2_step1',
       title: { type: 'plain_text', text: 'New Campaign - 1/3' },
       submit: { type: 'plain_text', text: 'Next' },
       close: { type: 'plain_text', text: 'Cancel' },
@@ -130,7 +130,7 @@ app.command('/new_campaign', async ({ ack, body, client, logger }) => {
     };
 
     // Log before opening the view
-    logger.info(`>>> Opening Step 1 modal with callback_id: ${viewPayload.callback_id}`);
+    logger.info(`>>> Opening Step 1 modal with callback_id: ${viewPayload.callback_id}`); // Log the new ID
     // logger.debug(`>>> View Payload Step 1: ${JSON.stringify(viewPayload)}`); // Uncomment for detailed debugging
 
     // Call views.open with the trigger_id and view payload
@@ -145,7 +145,7 @@ app.command('/new_campaign', async ({ ack, body, client, logger }) => {
     // Optionally send an ephemeral message to the user
     try {
         await client.chat.postEphemeral({
-            channel: body.channel_id,
+            channel: body.channel_id, // Use channel_id from command body
             user: body.user_id,
             text: `Sorry, I couldn't open the campaign form. Error: ${error.message}`
         });
@@ -157,7 +157,8 @@ app.command('/new_campaign', async ({ ack, body, client, logger }) => {
 
 
 // --- Step 1 Submission: Push Step 2 ---
-app.view('new_campaign_step1', async ({ ack, view, client, logger }) => {
+// *** LISTEN FOR RENAMED CALLBACK ID ***
+app.view('new_campaign_v2_step1', async ({ ack, view, client, logger }) => {
   // Acknowledge the view submission
   await ack();
 
@@ -166,13 +167,14 @@ app.view('new_campaign_step1', async ({ ack, view, client, logger }) => {
 
   // Push Step 2, embedding step1 in private_metadata
   try {
-    logger.info(`>>> Submitting Step 1, pushing Step 2. Trigger ID: ${view.trigger_id}`);
+    logger.info(`>>> Submitting Step 1 (v2), pushing Step 2. Trigger ID: ${view.trigger_id}`);
     await client.views.push({
       // trigger_id is required for pushing views
       trigger_id: view.trigger_id,
       view: {
         type: 'modal',
-        callback_id: 'new_campaign_step2',
+        // *** USE RENAMED CALLBACK ID ***
+        callback_id: 'new_campaign_v2_step2',
         title: { type: 'plain_text', text: 'New Campaign - 2/3' },
         submit: { type: 'plain_text', text: 'Next' },
         close: { type: 'plain_text', text: 'Cancel' },
@@ -223,14 +225,15 @@ app.view('new_campaign_step1', async ({ ack, view, client, logger }) => {
         ]
       }
     });
-     logger.info(`>>> Successfully pushed Step 2 view.`);
+     logger.info(`>>> Successfully pushed Step 2 (v2) view.`);
   } catch (err) {
-    logger.error(`Error pushing step 2 view: ${err}`);
+    logger.error(`Error pushing step 2 (v2) view: ${err}`);
   }
 });
 
 // --- Step 2 Submission: Push Step 3 ---
-app.view('new_campaign_step2', async ({ ack, view, client, logger }) => {
+// *** LISTEN FOR RENAMED CALLBACK ID ***
+app.view('new_campaign_v2_step2', async ({ ack, view, client, logger }) => {
   // Acknowledge the view submission
   await ack();
 
@@ -239,27 +242,29 @@ app.view('new_campaign_step2', async ({ ack, view, client, logger }) => {
 
   // Safely retrieve previous step's data
   try {
+    // private_metadata is passed along automatically by Slack when pushing views
     const metadata = JSON.parse(view.private_metadata);
     step1 = metadata.step1 || {}; // Use default if parsing fails or step1 missing
   } catch (parseError) {
-    logger.error(`Error parsing private_metadata in step 2: ${parseError}`);
+    logger.error(`Error parsing private_metadata in step 2 (v2): ${parseError}`);
     // Decide how to handle - maybe show an error message back to the user?
     // For now, we proceed with potentially missing step1 data but log the error.
   }
 
   // Push Step 3, embedding both step1 & step2
   try {
-    logger.info(`>>> Submitting Step 2, pushing Step 3. Trigger ID: ${view.trigger_id}`);
+    logger.info(`>>> Submitting Step 2 (v2), pushing Step 3. Trigger ID: ${view.trigger_id}`);
     await client.views.push({
       trigger_id: view.trigger_id,
       view: {
         type: 'modal',
-        callback_id: 'new_campaign_step3',
+        // *** USE RENAMED CALLBACK ID ***
+        callback_id: 'new_campaign_v2_step3',
         title: { type: 'plain_text', text: 'New Campaign - 3/3' },
         submit: { type: 'plain_text', text: 'Submit' },
         close: { type: 'plain_text', text: 'Cancel' },
         // Store combined previous steps' data
-        private_metadata: JSON.stringify({ step1, step2 }),
+        private_metadata: JSON.stringify({ step1, step2 }), // Pass along step1 and step2 data
         blocks: [
            // --- Blocks for Step 3 ---
            {
@@ -337,18 +342,19 @@ app.view('new_campaign_step2', async ({ ack, view, client, logger }) => {
         ]
       }
     });
-    logger.info(`>>> Successfully pushed Step 3 view.`);
+    logger.info(`>>> Successfully pushed Step 3 (v2) view.`);
   } catch (err) {
-    logger.error(`Error pushing step 3 view: ${err}`);
+    logger.error(`Error pushing step 3 (v2) view: ${err}`);
   }
 });
 
 
 // --- Final Submission: Process All Data ---
-app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
+// *** LISTEN FOR RENAMED CALLBACK ID ***
+app.view('new_campaign_v2_step3', async ({ ack, view, body, client, logger }) => {
   // Acknowledge the view submission immediately
   await ack();
-  logger.info(`>>> Received final submission (Step 3) from user ${body.user.id}`);
+  logger.info(`>>> Received final submission (Step 3 v2) from user ${body.user.id}`);
 
   let step1 = {};
   let step2 = {};
@@ -356,12 +362,13 @@ app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
 
   // Safely parse all previous steps' data from private_metadata
   try {
+    // private_metadata contains data from the view that triggered this submission (step 2's push)
     const metadata = JSON.parse(view.private_metadata);
     step1 = metadata.step1 || {};
     step2 = metadata.step2 || {};
-    logger.info(`>>> Successfully parsed private_metadata for steps 1 & 2.`);
+    logger.info(`>>> Successfully parsed private_metadata for steps 1 & 2 (v2).`);
   } catch (parseError) {
-    logger.error(`Error parsing private_metadata in step 3: ${parseError}`);
+    logger.error(`Error parsing private_metadata in step 3 (v2): ${parseError}`);
     // Notify the user about the error
     try {
         await client.chat.postEphemeral({
@@ -377,7 +384,7 @@ app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
 
   // Combine values from all steps into a single state object
   const combinedState = { ...step1, ...step2, ...step3 };
-  // logger.debug(">>> Combined State:", JSON.stringify(combinedState, null, 2)); // Uncomment for debugging
+  // logger.debug(">>> Combined State (v2):", JSON.stringify(combinedState, null, 2)); // Uncomment for debugging
 
   // Helper function to safely get value from state object
   const getValue = (state, blockId, actionId, type = 'value', defaultValue = null) => {
@@ -388,15 +395,18 @@ app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
 
       switch (type) {
           case 'selected_options':
-              return element.selected_options || defaultValue || []; // Default to empty array for multi-selects
+              // Checkboxes return selected_options
+              return element.selected_options || defaultValue || [];
           case 'selected_option':
+              // Radio buttons or select menus return selected_option
               return element.selected_option || defaultValue;
           case 'selected_date':
+              // Date pickers return selected_date
               return element.selected_date || defaultValue;
           case 'value':
           default:
-              // Handle plain_text_input, checkboxes etc. returning 'value'
-              return element.value !== undefined ? element.value : defaultValue;
+              // Plain text input returns value
+              return element.value !== undefined && element.value !== null ? element.value : defaultValue;
       }
   };
 
@@ -438,7 +448,7 @@ app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
     // Meta
     user_id: body.user.id, // Get user ID from the body
 
-    // Step 1 Fields
+    // Step 1 Fields (Accessed via combinedState using block/action IDs from Step 1 blocks)
     campaign_name: getValue(combinedState, 'campaign_name_block', 'campaign_name_input', 'value', 'Untitled Campaign'),
     brand_product: getValue(combinedState, 'brand_product_block', 'brand_product_input', 'value', ''), // NOT NULL DEFAULT ''
     background: getValue(combinedState, 'background_block', 'background_input', 'value', ''), // NOT NULL DEFAULT ''
@@ -448,12 +458,12 @@ app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
     channels: (getValue(combinedState, 'channels_block', 'channels_select', 'selected_options') || []).map(o => o.value), // Assuming TEXT[]
     assets_links: getValue(combinedState, 'assets_block', 'assets_input', 'value'), // TEXT, allows NULL
 
-    // Step 2 Fields
+    // Step 2 Fields (Accessed via combinedState using block/action IDs from Step 2 blocks)
     kpis: parseKpis(getValue(combinedState, 'kpis_block', 'kpis_input', 'value')), // JSONB NOT NULL DEFAULT '[]'
     message_pillars: (getValue(combinedState, 'pillars_block', 'pillars_input', 'value', '') || '').split(',').map(s => s.trim()).filter(s => s), // TEXT[] NOT NULL DEFAULT '{}'
     milestones: parseMilestones(getValue(combinedState, 'milestones_block', 'milestones_input', 'value')), // JSONB DEFAULT '[]'
 
-    // Step 3 Fields
+    // Step 3 Fields (Accessed via combinedState using block/action IDs from Step 3 blocks)
     tactical_requirements: getValue(combinedState, 'tactics_block', 'tactics_input', 'value'), // TEXT, allows NULL
     legal_notes: getValue(combinedState, 'legal_block', 'legal_input', 'value'), // TEXT, allows NULL
     stakeholder_approvals: (getValue(combinedState, 'stakeholders_block', 'stakeholders_select', 'selected_options') || []).map(o => o.value), // TEXT[] NOT NULL DEFAULT '{}'
@@ -464,32 +474,39 @@ app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
    // Clean up payload: Remove null values for fields that allow NULL in DB
    // Keep empty arrays/objects for fields with NOT NULL DEFAULTs
    Object.keys(payload).forEach(key => {
-     if (payload[key] === null) {
-       // Check your DB schema if the column allows NULLs. If yes, delete the key.
-       // If NO, you might want to set a default like '' or 0 depending on type,
-       // but the getValue helper should handle defaults now.
-       // Example: Assuming fields like tactical_requirements, legal_notes, etc., allow NULL
-       if (['tactical_requirements', 'legal_notes', 'reporting_requirements', 'assets_links', 'target_audience'].includes(key)) {
+     // Check if the value is truly null or undefined before deleting
+     if (payload[key] === null || payload[key] === undefined) {
+       // Only delete if the DB column allows NULLs
+       if (['tactical_requirements', 'legal_notes', 'reporting_requirements', 'assets_links', 'target_audience', 'milestones', 'report_distribution'].includes(key)) { // Added milestones/report_distribution as they have defaults but might be optional inputs
             delete payload[key];
        }
-       // Ensure required fields have a value (though defaults should cover this)
-       if (key === 'campaign_name' && !payload[key]) payload[key] = 'Untitled Campaign';
      }
+     // Ensure required fields have a value (getValue defaults should handle most)
+     if (key === 'campaign_name' && !payload[key]) payload[key] = 'Untitled Campaign';
+     if (key === 'brand_product' && payload[key] === null) payload[key] = ''; // Ensure NOT NULL fields have a default
+     if (key === 'background' && payload[key] === null) payload[key] = ''; // Ensure NOT NULL fields have a default
+     // Ensure array/JSONB fields that are NOT NULL have a default value if empty after processing
+     if (key === 'kpis' && !payload[key]) payload[key] = [];
+     if (key === 'message_pillars' && !payload[key]) payload[key] = [];
+     if (key === 'stakeholder_approvals' && !payload[key]) payload[key] = [];
+     if (key === 'objectives' && !payload[key]) payload[key] = []; // Added objectives check
+     if (key === 'channels' && !payload[key]) payload[key] = []; // Added channels check
+
    });
 
   // Log the final payload before insertion
-  logger.info('Attempting to insert payload into Supabase:', JSON.stringify(payload, null, 2));
+  logger.info('Attempting to insert payload (v2) into Supabase:', JSON.stringify(payload, null, 2));
 
   // Insert into Supabase
   const { data, error } = await supabase.from('campaigns').insert(payload).select(); // Added .select() to potentially get back the inserted row
 
   // Confirm or error message to the user
   if (error) {
-    logger.error('Supabase error:', error);
+    logger.error('Supabase error (v2):', error);
     // Provide more specific feedback
     try {
         await client.chat.postEphemeral({
-          channel: body.user.id,
+          channel: body.user.id, // Use user ID for ephemeral message channel
           user: body.user.id,
           text: `❌ Failed to save campaign: ${error.message}. Please check your inputs, especially formatting for KPIs/Milestones, and try again. \n Details: ${error.details || '(no details provided)'}`
         });
@@ -497,7 +514,7 @@ app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
         logger.error(`Failed to send ephemeral error message: ${ephemeralError}`);
     }
   } else {
-    logger.info(`Campaign '${payload.campaign_name}' saved successfully for user ${body.user.id}. Inserted data: ${JSON.stringify(data)}`);
+    logger.info(`Campaign '${payload.campaign_name}' saved successfully (v2) for user ${body.user.id}. Inserted data: ${JSON.stringify(data)}`);
     try {
         await client.chat.postMessage({
           channel: body.user.id, // Send confirmation to the user who submitted
@@ -512,8 +529,25 @@ app.view('new_campaign_step3', async ({ ack, view, body, client, logger }) => {
 
 // --- Global Error Handler ---
 app.error(async (error) => {
-  logger.error(`Unhandled error: ${error}`);
-  // Add any necessary global error handling logic here
+  // error contains payload data, error object
+  logger.error(`Unhandled Bolt error: ${error.message || error}`);
+  logger.debug("Error payload:", JSON.stringify(error, null, 2)); // Log the full error context if needed
+
+  // Attempt to notify the user if possible (e.g., from an interaction payload)
+  const userId = error.context?.userId || error.body?.user?.id;
+  const channelId = error.context?.channelId || error.body?.channel?.id || userId; // Fallback to DM
+
+  if (userId && channelId && error.client) {
+      try {
+          await error.client.chat.postEphemeral({
+              channel: channelId,
+              user: userId,
+              text: `An unexpected error occurred. Please try again later or contact support if the issue persists.`
+          });
+      } catch (ephemeralError) {
+          logger.error(`Failed to send global error ephemeral message: ${ephemeralError}`);
+      }
+  }
 });
 
 
@@ -529,5 +563,4 @@ app.error(async (error) => {
      process.exit(1);
   }
 })();
-
 
