@@ -557,11 +557,15 @@ app.error(async (error) => {
 (async () => {
   try {
     await app.start();
-    console.log('⚡️ Bolt app is running in Socket Mode!');
-     logger.info('⚡️ Bolt app is running in Socket Mode!');
+    // Use both console.log and logger.info for maximum visibility
+    const startupMessage = '⚡️ Bolt app is running in Socket Mode! (v2 command + startup log test)'; // Added identifier
+    console.log(startupMessage); // Direct console output
+    logger.info(startupMessage); // Bolt logger output
   } catch (startError) {
-     console.error('💥 Failed to start Bolt app:', startError);
-     logger.error('💥 Failed to start Bolt app:', startError);
+     // Log startup errors to both console and logger
+     const errorMessage = `💥 Failed to start Bolt app: ${startError}`;
+     console.error(errorMessage);
+     logger.error(errorMessage);
      process.exit(1);
   }
 })();
