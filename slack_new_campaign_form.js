@@ -22,30 +22,22 @@ const app = new App({
 const logger = app.logger;
 
 // --- Step 0: Slash Command to Open the First Modal ---
-// *** SIMPLIFIED FOR TESTING ***
+// *** RESTORED MODAL OPENING LOGIC ***
 app.command('/new_campaign', async ({ ack, body, client, logger }) => {
   // Acknowledge the command request
   await ack();
 
-  // --- TEST LOGGING ---
-  // Log a unique message to confirm this specific handler is being executed.
-  // We are NOT opening a modal in this test version.
-  logger.info(`>>> /new_campaign V2 COMMAND HANDLER EXECUTED! User: ${body.user_id}, Channel: ${body.channel_id} <<<`);
-  // --- END TEST ---
-
-  // --- Original code commented out for testing ---
-  /*
   try {
     // Define the view for the first step
     const viewPayload = {
       type: 'modal',
-      // *** RENAMED CALLBACK ID ***
+      // *** Using V2 CALLBACK ID ***
       callback_id: 'new_campaign_v2_step1',
       title: { type: 'plain_text', text: 'New Campaign - 1/3' },
       submit: { type: 'plain_text', text: 'Next' },
       close: { type: 'plain_text', text: 'Cancel' },
       blocks: [
-        // --- Blocks for Step 1 ---
+        // --- Blocks for Step 1 (Ensure these match your desired Step 1 fields) ---
         {
           "type": "input",
           "block_id": "campaign_name_block",
@@ -139,7 +131,7 @@ app.command('/new_campaign', async ({ ack, body, client, logger }) => {
     };
 
     // Log before opening the view
-    logger.info(`>>> Opening Step 1 modal with callback_id: ${viewPayload.callback_id}`); // Log the new ID
+    logger.info(`>>> Opening Step 1 modal with callback_id: ${viewPayload.callback_id}`); // Log the v2 ID
     // logger.debug(`>>> View Payload Step 1: ${JSON.stringify(viewPayload)}`); // Uncomment for detailed debugging
 
     // Call views.open with the trigger_id and view payload
@@ -162,7 +154,6 @@ app.command('/new_campaign', async ({ ack, body, client, logger }) => {
         logger.error(`Failed to send ephemeral error message: ${ephemeralError}`);
     }
   }
-  */
 });
 
 
@@ -573,4 +564,3 @@ app.error(async (error) => {
      process.exit(1);
   }
 })();
-
