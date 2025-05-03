@@ -1,34 +1,25 @@
 // slack_new_campaign_form.js
 require('dotenv').config();
-
 const { App } = require('@slack/bolt');
 const { createClient } = require('@supabase/supabase-js');
-const TelegramBot = require('telegraf'); // if you want to notify Telegram
 
-//
-// 1) Supabase client
-//
+// 1) Initialize Supabase client
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-//
-// 2) Bolt in Socket Mode
-//
+// 2) Initialize your Bolt app in Socket Mode
 const app = new App({
-  token:         process.env.SLACK_BOT_TOKEN,       // xoxb-…
-  signingSecret: process.env.SLACK_SIGNING_SECRET,  // your signing secret
-  socketMode:    true,                              // ← enable Socket Mode
-  appToken:      process.env.SLACK_APP_TOKEN        // xapp-… from App-Level Tokens
+  token:        process.env.SLACK_BOT_TOKEN,       // xoxb-…
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
+  socketMode:   true,
+  appToken:     process.env.SLACK_APP_TOKEN        // xapp-…
 });
 
-//
-// 3) /new_campaign — open the modal
-//
+// 3) Slash command listener—opens the full modal
 app.command('/new_campaign', async ({ ack, body, client, logger }) => {
   await ack();
-
   try {
     await client.views.open({
       trigger_id: body.trigger_id,
@@ -41,119 +32,110 @@ app.command('/new_campaign', async ({ ack, body, client, logger }) => {
         blocks: [
           // Campaign Name
           {
-            type:      'input',
-            block_id:  'campaign_name',
-            element:   { type: 'plain_text_input', action_id: 'value' },
-            label:     { type: 'plain_text', text: 'Campaign Name' }
+            type:     'input',
+            block_id: 'campaign_name',
+            element:  { type: 'plain_text_input', action_id: 'value' },
+            label:    { type: 'plain_text', text: 'Campaign Name' }
           },
-
           // Campaign Summary
           {
-            type:      'input',
-            block_id:  'description',
-            element:   {
-              type:         'plain_text_input',
-              action_id:    'value',
-              multiline:    true
-            },
-            label:     { type: 'plain_text', text: 'Campaign Summary' }
-          },
-
-          // Objectives & KPIs
-          {
-            type:      'input',
-            block_id:  'objectives',
-            element:   {
-              type:        'checkboxes',
-              action_id:   'value',
-              options: [
-                { text: { type:'plain_text',text:'Brand Awareness' }, value:'Brand Awareness' },
-                { text: { type:'plain_text',text:'Lead Gen' },       value:'Lead Gen' },
-                { text: { type:'plain_text',text:'Engagement' },     value:'Engagement' }
-              ]
-            },
-            label:     { type:'plain_text', text:'Objectives & KPIs' }
-          },
-
-          // Target Audience (optional)
-          {
-            type:      'input',
-            block_id:  'target_audience',
-            optional:  true,
-            element:   {
+            type:     'input',
+            block_id: 'description',
+            element:  {
               type:      'plain_text_input',
               action_id: 'value',
               multiline: true
             },
-            label:     { type:'plain_text', text:'Target Audience' }
+            label: { type: 'plain_text', text: 'Campaign Summary' }
           },
-
-          // Budget
+          // Objectives & KPIs
           {
-            type:      'input',
-            block_id:  'budget',
-            element:   {
-              type:                 'number_input',
-              action_id:            'value',
-              is_decimal_allowed:   false,
-              min_value:            '100'
-            },
-            label:     { type:'plain_text', text:'Budget (EUR)' }
-          },
-
-          // Channels
-          {
-            type:      'input',
-            block_id:  'channels',
-            element:   {
-              type:        'multi_static_select',
-              action_id:   'value',
-              placeholder: { type:'plain_text',text:'Select channels' },
+            type:     'input',
+            block_id: 'objectives',
+            element:  {
+              type:      'checkboxes',
+              action_id: 'value',
               options: [
-                { text:{type:'plain_text',text:'Email'},     value:'Email' },
-                { text:{type:'plain_text',text:'Social'},    value:'Social' },
-                { text:{type:'plain_text',text:'Display Ads'},value:'Display Ads' },
-                { text:{type:'plain_text',text:'Search'},    value:'Search' }
+                { text: { type: 'plain_text', text: 'Brand Awareness' }, value: 'Brand Awareness' },
+                { text: { type: 'plain_text', text: 'Lead Gen' },          value: 'Lead Gen' },
+                { text: { type: 'plain_text', text: 'Engagement' },        value: 'Engagement' }
               ]
             },
-            label:     { type:'plain_text',text:'Channels' }
+            label: { type: 'plain_text', text: 'Objectives & KPIs' }
           },
-
-          // Start Date
+          // Target Audience (optional)
           {
-            type:      'input',
-            block_id:  'start_date',
-            element:   {
-              type:      'datepicker',
-              action_id:'value',
-              placeholder:{ type:'plain_text',text:'Select a date' }
-            },
-            label:     { type:'plain_text',text:'Start Date' }
-          },
-
-          // End Date
-          {
-            type:      'input',
-            block_id:  'end_date',
-            element:   {
-              type:      'datepicker',
-              action_id:'value',
-              placeholder:{ type:'plain_text',text:'Select a date' }
-            },
-            label:     { type:'plain_text',text:'End Date' }
-          },
-
-          // Asset URLs / Notes (optional)
-          {
-            type:      'input',
-            block_id:  'assets_links',
-            optional:  true,
-            element:   {
+            type:     'input',
+            block_id: 'target_audience',
+            optional: true,
+            element:  {
               type:      'plain_text_input',
-              action_id:'value',
+              action_id: 'value',
               multiline: true
             },
-            label:     { type:'plain_text',text:'Asset URLs / Notes' }
+            label: { type: 'plain_text', text: 'Target Audience' }
+          },
+          // Budget
+          {
+            type:     'input',
+            block_id: 'budget',
+            element:  {
+              type:                'number_input',
+              action_id:           'value',
+              is_decimal_allowed:  false,
+              min_value:          '0'
+            },
+            label: { type: 'plain_text', text: 'Budget (EUR)' }
+          },
+          // Channels (multi-select)
+          {
+            type:     'input',
+            block_id: 'channels',
+            element:  {
+              type:        'multi_static_select',
+              action_id:   'value',
+              placeholder: { type: 'plain_text', text: 'Select channels' },
+              options: [
+                { text: { type: 'plain_text', text: 'Email' },       value: 'Email' },
+                { text: { type: 'plain_text', text: 'Social Media' }, value: 'Social Media' },
+                { text: { type: 'plain_text', text: 'Paid Ads' },     value: 'Paid Ads' }
+              ]
+            },
+            label: { type: 'plain_text', text: 'Channels' }
+          },
+          // Start Date
+          {
+            type:     'input',
+            block_id: 'start_date',
+            element:  {
+              type:        'datepicker',
+              action_id:   'value',
+              placeholder: { type: 'plain_text', text: 'Select a date' }
+            },
+            label: { type: 'plain_text', text: 'Start Date' }
+          },
+          // End Date
+          {
+            type:     'input',
+            block_id: 'end_date',
+            element:  {
+              type:        'datepicker',
+              action_id:   'value',
+              placeholder: { type: 'plain_text', text: 'Select a date' }
+            },
+            label: { type: 'plain_text', text: 'End Date' }
+          },
+          // Assets URLs / Notes (optional)
+          {
+            type:     'input',
+            block_id: 'assets_links',
+            optional: true,
+            element:  {
+              type:      'plain_text_input',
+              action_id: 'value',
+              multiline: true
+            },
+            label: { type: 'plain_text', text: 'Asset URLs / Notes' }
           }
         ]
       }
@@ -163,75 +145,47 @@ app.command('/new_campaign', async ({ ack, body, client, logger }) => {
   }
 });
 
-//
-// 4) Handle the submission
-//
+// 4) Handle the submission, insert into Supabase, confirm back in Slack (and optionally Telegram)
 app.view('new_campaign_modal', async ({ ack, view, body, client, logger }) => {
   await ack();
-  const user = body.user.id;
-  const vals = view.state.values;
+  const userId = body.user.id;
+  const v = view.state.values;
 
-  // extract values
-  const campaign_name   = vals.campaign_name.value.value;
-  const description     = vals.description.value.value;
-  const objectives      = vals.objectives.value.selected_options.map(o=>o.value);
-  const target_audience = vals.target_audience?.value.value || null;
-  const budget          = parseInt(vals.budget.value.value,10);
-  const channels        = vals.channels.value.selected_options.map(o=>o.value);
-  const start_date      = vals.start_date.value.selected_date;
-  const end_date        = vals.end_date.value.selected_date;
-  const assets_links    = vals.assets_links?.value.value || null;
+  // Extract all field values
+  const payload = {
+    user_id:         userId,
+    campaign_name:   v.campaign_name.value.value,
+    description:     v.description.value.value,
+    objectives:      v.objectives.value.selected_options.map(o => o.value),
+    target_audience: v.target_audience?.value.value || null,
+    budget:          parseInt(v.budget.value.value, 10),
+    channels:        v.channels.value.selected_options.map(o => o.value),
+    start_date:      v.start_date.value.selected_date,
+    end_date:        v.end_date.value.selected_date,
+    assets_links:    v.assets_links?.value.value || null
+  };
 
-  // write to Supabase
   const { error } = await supabase
     .from('campaigns')
-    .insert({
-      user_id:        user,
-      campaign_name,
-      description,
-      objectives,
-      target_audience,
-      budget,
-      channels,
-      start_date,
-      end_date,
-      assets_links
-    });
+    .insert(payload);
 
   if (error) {
-    logger.error('Supabase insert error:', error);
-    // optionally tell the user
     await client.chat.postEphemeral({
       channel: body.user.id,
-      user,
-      text:    '⚠️ Oops, something went wrong saving your campaign. Please try again.'
+      user:    userId,
+      text:    `❌ Failed to save campaign: ${error.message}`
     });
-    return;
-  }
+  } else {
+    await client.chat.postMessage({
+      channel: userId,
+      text:    `🎉 Your campaign *${payload.campaign_name}* has been saved!`
+    });
 
-  // confirmation DM
-  await client.chat.postMessage({
-    channel: user,
-    text:    `🎉 Your campaign *${campaign_name}* has been saved!`
-  });
-
-  // OPTIONAL: forward to Telegram
-  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
-    const bot = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN);
-    const msg = [
-      `📣 New campaign request: *${campaign_name}*`,
-      `*Summary:* ${description}`,
-      `*Budget:* €${budget}`,
-      `*Start:* ${start_date}   *End:* ${end_date}`,
-      `*Channels:* ${channels.join(', ')}`,
-    ].join('\n');
-    bot.telegram.sendMessage(process.env.TELEGRAM_CHAT_ID, msg, { parse_mode:'Markdown' });
+    // ← optional: forward to Telegram here
   }
 });
 
-//
-// 5) Start your app
-//
+// 5) Start your app (no HTTP port needed in socket mode)
 (async () => {
   await app.start();
   console.log('⚡️ Bolt app is running in Socket Mode!');
