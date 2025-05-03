@@ -22,17 +22,18 @@ const app = new App({
 const logger = app.logger;
 
 // --- Step 0: Slash Command to Open the First Modal ---
-// *** RESTORED MODAL OPENING LOGIC ***
-app.command('/new_campaign', async ({ ack, body, client, logger }) => {
+// *** LISTEN FOR RENAMED COMMAND: /new_campaign_v2 ***
+app.command('/new_campaign_v2', async ({ ack, body, client, logger }) => {
   // Acknowledge the command request
   await ack();
+  logger.info(`>>> Received /new_campaign_v2 command from user ${body.user_id}`);
 
   try {
     // Define the view for the first step
     const viewPayload = {
       type: 'modal',
       // *** Using V2 CALLBACK ID ***
-      callback_id: 'new_campaign_v2_step1',
+      callback_id: 'new_campaign_v2_step1', // Keep v2 callback IDs
       title: { type: 'plain_text', text: 'New Campaign - 1/3' },
       submit: { type: 'plain_text', text: 'Next' },
       close: { type: 'plain_text', text: 'Cancel' },
@@ -142,7 +143,7 @@ app.command('/new_campaign', async ({ ack, body, client, logger }) => {
     logger.info(`>>> Successfully called views.open for trigger_id: ${body.trigger_id}`);
 
   } catch (error) {
-    logger.error(`Error in /new_campaign command handler: ${error}`);
+    logger.error(`Error in /new_campaign_v2 command handler: ${error}`); // Update log message
     // Optionally send an ephemeral message to the user
     try {
         await client.chat.postEphemeral({
