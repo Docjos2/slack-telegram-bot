@@ -1,0 +1,17 @@
+{
+  "name": "slack-bot",
+  "version": "1.0.0",
+  "main": "slack_new_campaign_form.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@slack/bolt": "^4.2.1",
+    "@supabase/supabase-js": "^2.49.4",
+    "dotenv": "^16.5.0"
+  }
+}
