@@ -1,12 +1,13 @@
 // FILE: slack_new_campaign_form.js
-// Handles Slack command, opens modal, and confirms submission.
+// Handles Slack command, opens modal, confirms submission, and triggers n8n webhook.
 // Channel creation and further processing should be handled by n8n.
 
 require('dotenv').config();
 const { App, LogLevel } = require('@slack/bolt');
+const axios = require('axios'); // Import axios for making HTTP requests
 
 // Initialize Bolt App
-// Ensure SLACK_BOT_TOKEN (xoxb-), SLACK_APP_TOKEN (xapp-), and SLACK_SIGNING_SECRET are in your .env file
+// Ensure SLACK_BOT_TOKEN (xoxb-), SLACK_APP_TOKEN (xapp-), SLACK_SIGNING_SECRET, and N8N_WEBHOOK_URL are in your .env file
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
@@ -16,6 +17,20 @@ const app = new App({
 });
 
 const logger = app.logger;
+
+// Define your n8n webhook URL (Best practice: move to .env file)
+// Read from environment variable first, then fallback to hardcoded (remove hardcoded in production)
+const N8N_WEBHOOK_URL_FROM_ENV = process.env.N8N_WEBHOOK_URL;
+const N8N_WEBHOOK_URL_FALLBACK = 'https://n8n.tekstbuddy.nl:5678/webhook/9e1da38c-0c7f-4ac8-b388-0b080aab19c5'; // Keep fallback for safety during debug
+
+// Log the URL source on startup
+if (N8N_WEBHOOK_URL_FROM_ENV) {
+    logger.info(`Using N8N_WEBHOOK_URL from environment variable.`);
+} else {
+    logger.warn(`N8N_WEBHOOK_URL environment variable not found! Using fallback URL: ${N8N_WEBHOOK_URL_FALLBACK}`);
+}
+const N8N_WEBHOOK_URL = N8N_WEBHOOK_URL_FROM_ENV || N8N_WEBHOOK_URL_FALLBACK;
+
 
 // --- Slash Command Handler (/new_campaign_v2) ---
 // Listens for the command and opens the modal
@@ -28,12 +43,12 @@ app.command('/new_campaign_v2', async ({ ack, body, client, logger }) => {
     // Define the modal view
     const viewPayload = {
       type: 'modal',
-      // Unique identifier for this specific modal's submission
       callback_id: 'campaign_brief_modal_submit',
       title: { type: 'plain_text', text: 'New Campaign Brief' },
       submit: { type: 'plain_text', text: 'Submit Brief' },
       close: { type: 'plain_text', text: 'Cancel' },
       blocks: [
+         // ... (Modal blocks remain the same as previous version) ...
         // Block for Business Name
         {
           "type": "input",
@@ -182,7 +197,7 @@ app.view('campaign_brief_modal_submit', async ({ ack, body, view, client, logger
 
   // Extract data submitted in the modal
   const submittedData = view.state.values;
-  const user = body.user.id;
+  const user = body.user.id; // Slack User ID of the person who submitted
 
   // Helper function to safely extract values
   const getValue = (blockId, actionId, type = 'value', defaultValue = '') => {
@@ -204,15 +219,14 @@ app.view('campaign_brief_modal_submit', async ({ ack, body, view, client, logger
   const businessName = getValue('business_name_block', 'business_name_input');
   const requestCategory = getValue('request_category_block', 'request_category_select', 'selected_option');
   const otherCategoryDetails = getValue('other_category_details_block', 'other_category_details_input');
-  const briefDetails = getValue('brief_details_block', 'brief_details_input'); // *** ADDED EXTRACTION ***
+  const briefDetails = getValue('brief_details_block', 'brief_details_input');
   const targetAudience = getValue('target_audience_block', 'target_audience_input');
   const deliverables = getValue('deliverables_block', 'deliverables_input');
 
   // Log extracted data
-  logger.info(`Extracted Data: Business Name='${businessName}', Category='${requestCategory}', Other Details='${otherCategoryDetails}', Brief='${briefDetails}', Audience='${targetAudience}', Deliverables='${deliverables}'`); // *** UPDATED LOG ***
+  logger.info(`Extracted Data: Business Name='${businessName}', Category='${requestCategory}', Other Details='${otherCategoryDetails}', Brief='${briefDetails}', Audience='${targetAudience}', Deliverables='${deliverables}'`);
 
   // Prepare a confirmation message for the user
-  // *** UPDATED CONFIRMATION TEXT ***
   let confirmationText = `✅ Brief Received!\n\n*Business Name:* ${businessName}\n*Category:* ${requestCategory}`;
   if (requestCategory === 'other' && otherCategoryDetails) {
       confirmationText += ` (${otherCategoryDetails})`;
@@ -230,13 +244,63 @@ app.view('campaign_brief_modal_submit', async ({ ack, body, view, client, logger
     logger.error(`Error sending confirmation DM to user ${user}: ${error}`);
   }
 
-  // IMPORTANT: At this point, you would typically trigger your n8n workflow.
-  // Options include:
-  // 1. Posting the extracted data to a specific *internal* Slack channel that n8n monitors.
-  // 2. Sending the data to an n8n webhook URL using an HTTP request.
-  // 3. Inserting the data directly into your Supabase 'campaigns' table.
-  // Make sure to include the new 'briefDetails' field in the data sent to n8n/Supabase.
-  // This example only sends a confirmation DM. Implement your n8n trigger mechanism here.
+  // *** DEBUGGING: Log before attempting webhook call ***
+  logger.info(`Preparing to trigger n8n webhook. Checking URL...`);
+  const webhookUrl = process.env.N8N_WEBHOOK_URL || N8N_WEBHOOK_URL_FALLBACK; // Read again within this scope
+  logger.info(`Webhook URL determined as: ${webhookUrl}`); // Log the actual URL being used
+
+  // *** Trigger n8n Webhook ***
+  if (!webhookUrl) { // Check the URL read within this function scope
+      logger.error("Cannot trigger n8n: Webhook URL is missing or invalid.");
+      // Optionally notify user about the trigger failure
+      try {
+          await client.chat.postEphemeral({
+              channel: user, user: user,
+              text: `⚠️ I received your brief, but couldn't trigger the processing workflow due to a configuration issue. Please notify the admin.`});
+      } catch (ephemeralError) { logger.error(`Failed to send ephemeral error message about webhook config failure: ${ephemeralError}`); }
+      return; // Stop if webhook URL isn't set
+  }
+
+  // Construct the payload to send to n8n
+  const n8nPayload = {
+      slackUserId: user,
+      businessName: businessName,
+      requestCategory: requestCategory,
+      otherCategoryDetails: otherCategoryDetails,
+      briefDetails: briefDetails,
+      targetAudience: targetAudience,
+      deliverables: deliverables,
+      submissionTimestamp: new Date().toISOString() // Add a timestamp
+  };
+
+  try {
+      // *** DEBUGGING: Log right before the actual call ***
+      logger.info(`Attempting POST to n8n webhook: ${webhookUrl} with payload: ${JSON.stringify(n8nPayload)}`);
+      const response = await axios.post(webhookUrl, n8nPayload, {
+          headers: { 'Content-Type': 'application/json' }
+      });
+      // n8n webhook node typically returns { "message": "Workflow started" } on success
+      logger.info(`Successfully triggered n8n workflow. Response Status: ${response.status}, Response Data: ${JSON.stringify(response.data)}`);
+  } catch (error) {
+      logger.error(`Error triggering n8n webhook: ${error.message}`);
+      if (error.response) {
+          logger.error(`Webhook response data: ${JSON.stringify(error.response.data)}`);
+          logger.error(`Webhook response status: ${error.response.status}`);
+      } else if (error.request) {
+          logger.error(`Webhook request error: No response received.`);
+      } else {
+          logger.error('Webhook setup error', error.message);
+      }
+      // Notify the user that the follow-up failed
+      try {
+          await client.chat.postEphemeral({
+              channel: user, user: user,
+              text: `⚠️ I received your brief, but there was an error triggering the processing workflow. Please notify the admin.`
+          });
+      } catch (ephemeralError) {
+          logger.error(`Failed to send ephemeral error message about webhook failure: ${ephemeralError}`);
+      }
+  }
 
 });
 
@@ -249,9 +313,9 @@ app.error(async (error) => {
 // --- Start the App ---
 (async () => {
   try {
-    const port = process.env.PORT || 3000; // Required for some environments, though Socket Mode doesn't strictly use it for requests
+    const port = process.env.PORT || 3000;
     await app.start(port);
-    const startupMessage = `⚡️ Bolt app (Simple Modal v2 - Brief Field Added) is running on port ${port} in Socket Mode!`; // Updated startup message slightly
+    const startupMessage = `⚡️ Bolt app (Simple Modal v3 - Debug Webhook) is running on port ${port} in Socket Mode!`; // Updated startup message
     console.log(startupMessage);
     logger.info(startupMessage);
   } catch (error) {
