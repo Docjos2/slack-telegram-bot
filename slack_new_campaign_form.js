@@ -99,14 +99,33 @@ app.command('/new_campaign_v2', async ({ ack, body, client, logger }) => {
             "emoji": true
           }
         },
-        // Block for Target Audience
+        // *** NEW BLOCK: Brief / Request Details ***
+        {
+          "type": "input",
+          "block_id": "brief_details_block",
+          "element": {
+            "type": "plain_text_input",
+            "action_id": "brief_details_input",
+            "multiline": true, // Allows multiple lines for detailed description
+             "placeholder": {
+                "type": "plain_text",
+                "text": "Please describe your request, goals, background information, and any specific requirements..."
+            }
+          },
+          "label": {
+            "type": "plain_text",
+            "text": "Brief / Request Details",
+            "emoji": true
+          }
+        },
+        // Block for Target Audience (Single Line)
         {
           "type": "input",
           "block_id": "target_audience_block",
           "element": {
             "type": "plain_text_input",
             "action_id": "target_audience_input",
-            "multiline": true // Allows multiple lines
+            "multiline": false // *** CHANGED TO SINGLE LINE ***
           },
           "label": {
             "type": "plain_text",
@@ -185,18 +204,20 @@ app.view('campaign_brief_modal_submit', async ({ ack, body, view, client, logger
   const businessName = getValue('business_name_block', 'business_name_input');
   const requestCategory = getValue('request_category_block', 'request_category_select', 'selected_option');
   const otherCategoryDetails = getValue('other_category_details_block', 'other_category_details_input');
+  const briefDetails = getValue('brief_details_block', 'brief_details_input'); // *** ADDED EXTRACTION ***
   const targetAudience = getValue('target_audience_block', 'target_audience_input');
   const deliverables = getValue('deliverables_block', 'deliverables_input');
 
   // Log extracted data
-  logger.info(`Extracted Data: Business Name='${businessName}', Category='${requestCategory}', Other Details='${otherCategoryDetails}', Audience='${targetAudience}', Deliverables='${deliverables}'`);
+  logger.info(`Extracted Data: Business Name='${businessName}', Category='${requestCategory}', Other Details='${otherCategoryDetails}', Brief='${briefDetails}', Audience='${targetAudience}', Deliverables='${deliverables}'`); // *** UPDATED LOG ***
 
   // Prepare a confirmation message for the user
+  // *** UPDATED CONFIRMATION TEXT ***
   let confirmationText = `✅ Brief Received!\n\n*Business Name:* ${businessName}\n*Category:* ${requestCategory}`;
   if (requestCategory === 'other' && otherCategoryDetails) {
       confirmationText += ` (${otherCategoryDetails})`;
   }
-  confirmationText += `\n*Target Audience:* ${targetAudience}\n*Deliverables:* ${deliverables}\n\nYour request is being processed.`;
+  confirmationText += `\n*Brief Details:* ${briefDetails}\n*Target Audience:* ${targetAudience}\n*Deliverables:* ${deliverables}\n\nYour request is being processed.`;
 
   // Send the confirmation message directly to the user who submitted
   try {
@@ -214,6 +235,7 @@ app.view('campaign_brief_modal_submit', async ({ ack, body, view, client, logger
   // 1. Posting the extracted data to a specific *internal* Slack channel that n8n monitors.
   // 2. Sending the data to an n8n webhook URL using an HTTP request.
   // 3. Inserting the data directly into your Supabase 'campaigns' table.
+  // Make sure to include the new 'briefDetails' field in the data sent to n8n/Supabase.
   // This example only sends a confirmation DM. Implement your n8n trigger mechanism here.
 
 });
@@ -229,7 +251,7 @@ app.error(async (error) => {
   try {
     const port = process.env.PORT || 3000; // Required for some environments, though Socket Mode doesn't strictly use it for requests
     await app.start(port);
-    const startupMessage = `⚡️ Bolt app (Simple Modal v1) is running on port ${port} in Socket Mode!`;
+    const startupMessage = `⚡️ Bolt app (Simple Modal v2 - Brief Field Added) is running on port ${port} in Socket Mode!`; // Updated startup message slightly
     console.log(startupMessage);
     logger.info(startupMessage);
   } catch (error) {
